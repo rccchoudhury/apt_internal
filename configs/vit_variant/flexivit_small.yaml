@@ -1,0 +1,5 @@
+checkpoint_path: "flexivit_small"
+net:
+  embed_dim: 1024
+  depth: 8
+  num_heads: 4

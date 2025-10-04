@@ -1,0 +1,8 @@
+checkpoint_path: "./checkpoints/vit_base_patch8_224.pth"
+net:
+  img_size: 224
+  patch_size: 8
+  embed_dim: 768
+  depth: 12
+  num_heads: 12
+  pre_norm: false

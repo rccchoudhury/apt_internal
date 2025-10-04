@@ -1,0 +1,63 @@
+# @package _global_
+
+# to execute this validation run:
+# python validate.py experiment=validate_vit
+
+defaults:
+  - /model_variant@model: eva_giant_patch14_560
+  - /data_variant@data: eva_giant_patch14_560
+  - override /data: imagenet
+  - override /model: eva
+  - override /trainer: default
+  - override /callbacks: eval
+  #- _self_
+
+tags: ["imagenet", "vanilla", "validation"]
+
+seed: 42
+
+# Disable training and testing
+train: false
+test: true
+
+num_scales: 2
+thresholds: [6.0, 4.0]
+img_size: 560
+patch_size: 14
+
+trainer:
+  accelerator: "gpu"
+  devices: 1
+  precision: "16-mixed"
+  enable_checkpointing: false
+  max_epochs: 0
+  limit_test_batches: 1.0
+  logger: false
+
+model:
+  match_head_shape: true
+  net:
+    _target_: src.models.eva.Eva
+    # mixed_patch_embed:
+    #   _target_: src.models.patch_embed.TokenizedZeroConvPatchAttn
+    #   patch_size: ${patch_size}
+    #   num_scales: ${num_scales}
+    #   thresholds: ${thresholds}
+    #   image_size: ${img_size}
+    #   _partial_: true
+    patch_size: ${patch_size}
+  tokenizer: 
+    _target_: src.models.patch_tokenizer.PatchTokenizer
+    base_patch_size: ${patch_size}
+    num_scales: ${num_scales}
+    thresholds: ${thresholds}
+    image_size: ${img_size}
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]
+  compile: false
+
+data:
+  _target_: src.data.imagenet_module.ImagenetDataModule
+  batch_size: 16
+  num_workers: 12
+  pin_memory: true

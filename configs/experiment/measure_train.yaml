@@ -1,0 +1,76 @@
+# @package _global_
+
+# to execute this validation run:
+# python validate.py experiment=validate_vit
+
+defaults:
+  - /model_variant@model: vit_large_patch14_clip_224
+  - /data_variant@data: vit_large_patch14_clip_224
+  - override /data: imagenet
+  - override /model: vit
+  - override /trainer: default
+  - override /callbacks: eval
+  #- _self_
+
+tags: ["imagenet", "validation"]
+
+seed: 42
+
+# Disable training and testing
+train: false
+test: true
+
+num_scales: 2
+#thresholds: [0.0475, 0.03]
+#thresholds: [0.035, 0.035]
+thresholds: [5.5]
+img_size: 224
+patch_size: 14
+
+trainer:
+  accelerator: "gpu"
+  devices: 1
+  precision: "16-mixed"
+  enable_checkpointing: false
+  max_epochs: 0
+  limit_train_batches: 0
+  #limit_test_batches: 
+  logger: false
+
+model:
+  match_head_shape: true
+  net:
+    _target_: src.models.vision_transformer.VisionTransformer 
+    img_size: ${img_size}
+    patch_size: ${patch_size}
+    mixed_patch_embed:
+      _target_: src.models.patch_embed.TokenizedZeroConvPatchAttn
+      _partial_: true
+      patch_size: ${patch_size}
+    num_scales: ${num_scales}
+    alpha_schedule: false
+    thresholds: ${thresholds}
+    no_embed_class: false
+    drop_path_rate: 0.1
+    patch_drop_rate: 0.0
+    weight_init: 'skip'
+  tokenizer: 
+    _target_: src.models.patch_tokenizer.PatchTokenizer
+    base_patch_size: ${patch_size}
+    num_scales: ${num_scales}
+    thresholds: ${thresholds}
+    image_size: ${img_size}
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]
+    method: "entropy"  # Options: "entropy" or "laplacian"
+    laplacian_aggregate: "mean"  # Options: "mean", "max", or "std" (only used if method is "laplacian")
+  compile: false
+
+data:
+  _target_: src.data.imagenet_module.ImagenetDataModuleWithEntropy
+  img_size: ${img_size}
+  batch_size: 128
+  patch_size: ${patch_size}
+  num_scales: ${num_scales}
+  num_workers: 12
+  pin_memory: true

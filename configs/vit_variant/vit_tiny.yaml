@@ -1,0 +1,5 @@
+checkpoint_path: "vit_tiny_patch16_224"
+net:
+  embed_dim: 192
+  depth: 12
+  num_heads: 3

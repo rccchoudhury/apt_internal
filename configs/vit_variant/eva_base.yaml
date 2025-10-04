@@ -1,0 +1,11 @@
+net:
+  patch_size: 14
+  embed_dim: 768
+  depth: 12
+  num_heads: 12
+  mlp_ratio: 2.666666666666667 # 4 * 2 / 3
+  qkv_fused: False
+  swiglu_mlp: True
+  scale_mlp: True
+  use_rot_pos_emb: True
+  ref_feat_shape: [16, 16]  # 224/14

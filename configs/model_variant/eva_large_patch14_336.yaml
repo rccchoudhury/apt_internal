@@ -1,0 +1,8 @@
+checkpoint_path: "./checkpoints/eva_large_patch14_336.pth"
+net:
+  img_size: 336
+  patch_size: 14
+  embed_dim: 1024
+  depth: 24
+  num_heads: 16
+  global_pool: "avg"

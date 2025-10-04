@@ -1,0 +1,6 @@
+net:
+  patch_size: 14
+  embed_dim: 1408
+  depth: 40
+  num_heads: 16
+  mlp_ratio: 4.36363636363636 # 6144 / 1408

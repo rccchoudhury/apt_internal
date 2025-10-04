@@ -1,0 +1,20 @@
+_target_: src.models.vit_module.ViTLitModule
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-4  # Standard learning rate for ViT fine-tuning
+  weight_decay: 0.05  # Recommended weight decay for ViTs
+
+# scheduler:
+#   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+#   _partial_: true
+#   T_max: 100  # Number of epochs
+#   eta_min: 1e-6  # Minimum learning rate
+
+net:
+  _target_: src.models.eva.Eva
+  num_classes: 1000  # ImageNet classes
+
+# compile model for faster training with pytorch 2.0
+compile: true

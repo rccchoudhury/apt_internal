@@ -1,0 +1,5 @@
+checkpoint_path: "vit_large_patch16_384"
+net:
+  embed_dim: 1024
+  depth: 24
+  num_heads: 16

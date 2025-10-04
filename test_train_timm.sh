@@ -1,0 +1,19 @@
+ CUDA_VISIBLE_DEVICES='0,3,4,5,6,7' ./distributed_train.sh 6 \
+    --model vit_large_patch16_224.mae \
+    --opt adamw \
+    --sched cosine \
+    --epochs 50 \
+    --warmup-epochs 5 \
+    --lr 5e-4 \
+    --gp avg \
+    --smoothing 0.1 \
+    --layer-decay 0.75 \
+    --drop-path 0.1 \
+    --reprob 0.25 \
+    --min-lr 1e-6 \
+    --batch-size 384 \
+    --amp \
+    -j 12 \
+    --data-dir /edrive1/rchoudhu/ILSVRC2012 \
+    --log-wandb \
+    --wandb-project mixedres

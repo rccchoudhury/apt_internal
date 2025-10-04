@@ -1,0 +1,66 @@
+# @package _global_
+
+# to execute this validation run:
+# python src/train.py experiment=train_vit_transformer
+
+defaults:
+  - /vit_variant@model: vit_large
+  - override /data: imagenet
+  - override /model: vit
+  - override /trainer: default
+  - override /callbacks: eval
+  - override /logger: wandb
+  #- _self_
+
+tags: ["imagenet", "vit_vanilla", "train"]
+
+seed: 42
+
+# Disable training and testing
+train: true
+test: true
+
+trainer:
+  accelerator: "gpu"
+  devices: 6
+  precision: "16-mixed"
+  enable_checkpointing: true
+  max_epochs: 50
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  logger: true
+
+model:
+  checkpoint_path: "./checkpoints/vit_large_patch16_224_augreg_in21k_ft_in1k.pth"
+  # DOn't match head; this was trained on in21k
+  match_head_shape: false
+  net:
+    _target_: src.models.vision_transformer.VisionTransformer
+    img_size: 224
+    patch_size: 16
+    patch_drop_rate: 0.0
+    no_embed_class: false
+    drop_path_rate: 0.1
+    weight_init: 'skip'
+  compile: false
+  scheduler_cfg: 
+    _target_: src.models.optim_utils.CosineSchedulerConfig
+    # Partial bc batch size depends on other stuff.
+    warmup_epochs: 5
+    total_epochs: 50
+    lr: 5e-4
+    end_lr: 1e-6
+    start_lr: 1e-6
+  optimizer: 
+    lr: 1
+    _target_: torch.optim.AdamW
+    _partial_: true
+    betas: [0.9, 0.999]
+    weight_decay: 0.05
+
+data:
+  img_size: 224
+  batch_size: 192
+  # batch_size: 64
+  num_workers: 12
+  pin_memory: true

@@ -1,0 +1,8 @@
+checkpoint_path: "./checkpoints/vit_large_patch14_clip_336.pth"
+net:
+  img_size: 336
+  patch_size: 14
+  embed_dim: 1024
+  depth: 24
+  num_heads: 16
+  pre_norm: true

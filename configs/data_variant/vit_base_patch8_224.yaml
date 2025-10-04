@@ -1,0 +1,4 @@
+# vit_base_patch8_224
+img_size: 224
+mean: [0.5, 0.5, 0.5]
+std: [0.5, 0.5, 0.5]

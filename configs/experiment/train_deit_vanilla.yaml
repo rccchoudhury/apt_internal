@@ -1,0 +1,83 @@
+# @package _global_
+
+# to execute this validation run:
+# python src/train.py experiment=train_vit_transformer
+
+defaults:
+  - /vit_variant@model: deit_tiny
+  - override /data: imagenet
+  - override /model: vit
+  - override /trainer: default
+  - override /callbacks: eval
+  - override /logger: wandb
+  #- _self_
+
+tags: ["imagenet", "deit_vanilla", "train"]
+
+seed: 42
+
+# Disable training and testing
+train: true
+test: true
+
+trainer:
+  accelerator: "gpu"
+  devices: [0,3]
+  precision: "16-mixed"
+  enable_checkpointing: true
+  max_epochs: 300
+  limit_train_batches: 1.0
+  limit_val_batches: 1.0
+  logger: true
+
+model:
+  net:
+    _target_: src.models.vision_transformer.VisionTransformer
+    img_size: 224
+    patch_size: 16
+    patch_drop_rate: 0.0
+    no_embed_class: false
+    drop_path_rate: 0.1
+    weight_init: 'skip'
+  compile: false
+  scheduler_cfg: 
+    _target_: src.models.optim_utils.CosineSchedulerConfig
+    # Partial bc batch size depends on other stuff.
+    warmup_epochs: 5
+    total_epochs: 300
+    lr: 5e-4
+    end_lr: 1e-5
+    start_lr: 1e-6
+  optimizer: 
+    lr: 0.0005
+    _target_: torch.optim.AdamW
+    _partial_: true
+    betas: [0.9, 0.999]
+    weight_decay: 0.05
+  mixup:
+    mixup: 0.8
+    cutmix: 1.0
+    cutmix_minmax: null
+    mixup_prob: 1.0
+    mixup_switch_prob: 0.5
+    mixup_mode: "batch"
+    smoothing: 0.1
+    nb_classes: 1000
+    
+data:
+  img_size: 224
+  batch_size: 4096
+  # batch_size: 64
+  num_workers: 12
+  pin_memory: true
+
+  augment:
+    repeated_aug: false # has to be true, but failed to handle dist
+    color_jitter: 0.3
+    auto_augment: "rand-m9-mstd0.5-inc"
+    interpolation: "bicubic"
+    re_prob: 0.25
+    re_mode: "pixel"
+    re_count: 1
+    re_split: false
+    eval_crop_ratio: 0.875

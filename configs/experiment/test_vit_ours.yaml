@@ -1,0 +1,48 @@
+# @package _global_
+
+# to execute this validation run:
+# python src/train.py experiment=train_vit_transformer
+
+defaults:
+  - override /data: imagenet
+  - override /model: vit
+  - override /trainer: default
+  - override /callbacks: eval
+  #- _self_
+
+tags: ["imagenet", "ours", "validation"]
+
+seed: 42
+
+# Disable training and testing
+train: false
+test: true
+
+trainer:
+  accelerator: "gpu"
+  devices: 1
+  precision: "16-mixed"
+  enable_checkpointing: false
+  max_epochs: 0
+  limit_test_batches: 1.0
+  logger: false
+
+model:
+  match_head_shape: false
+  net:
+    _target_: src.models.vision_transformer.VisionTransformer 
+    mixed_patch_embed:
+      _target_: src.models.patch_embed.ZeroConvPatchAttn
+      _partial_: true
+    num_scales: 2
+    thresholds: [5.5]#, 4.5]
+    global_pool: 'token'
+    weight_init: 'skip'
+  compile: false
+
+data:
+  _target_: src.data.imagenet_module.ImagenetDataModuleWithEntropy
+  batch_size: 64
+  num_scales: 2
+  num_workers: 12
+  pin_memory: true

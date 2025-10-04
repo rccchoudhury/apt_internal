@@ -1,0 +1,11 @@
+_target_: src.models.timm_vit.VisionTransformer
+
+model:
+  _target_: timm.vision_transformer.VisionTransformer
+  img_size: 240
+  patch_size: 16
+  patch_embed: src.models.vision_transformer.MixedPatchEmbed
+  embed_dim: 1024
+  depth: 24
+  num_heads: 16
+  no_embed_class: true

@@ -1,0 +1,26 @@
+_target_: src.data.imagenet_module.ImagenetDataModuleWithEntropy
+
+data_dir: /edrive1/rchoudhu/ILSVRC2012  # Path to ImageNet dataset
+train_val_test_split: [0.9, 0.1, 0]  # Split ratios if not using standard ImageNet splits
+img_size: 384
+# Data loading
+batch_size: 64
+num_workers: 12
+pin_memory: true
+
+# Transforms
+mean: [0.5, 0.5, 0.5]  # EVA mean
+std: [0.5, 0.5, 0.5]   # EVA std
+# crop_pct: 0.9                # Center crop percentage for validation
+
+# # Data augmentation for training
+# train_transforms:
+#   random_resized_crop: true
+#   random_horizontal_flip: true
+#   color_jitter: 0.4
+#   auto_augment: "rand-m9-mstd0.5-inc1"  # RandAugment parameters
+
+# # Validation transforms
+# val_transforms:
+#   resize_size: 256  # Resize shorter side to this size
+#   crop_size: 224    # Then center crop to this size
