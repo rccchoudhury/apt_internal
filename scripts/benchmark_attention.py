@@ -1,9 +1,8 @@
 import torch
 import torch.nn.functional as F
-import xformers.ops as xops
-from xformers.ops.fmha.attn_bias import BlockDiagonalMask
+from flash_attn import flash_attn_varlen_func
 import time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 import argparse
 import ipdb
 from torch.nn.attention.flex_attention import create_block_mask, flex_attention
@@ -27,7 +26,7 @@ class BaseAttention(torch.nn.Module):
         self.k_norm = torch.nn.Identity()
         self.block_mask = None
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[BlockDiagonalMask] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cu_seqlens: Optional[torch.Tensor] = None, max_seqlen: Optional[int] = None) -> torch.Tensor:
         raise NotImplementedError("This method should be overridden by subclasses")
 
 class PackedAttention(BaseAttention):

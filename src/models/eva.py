@@ -33,9 +33,6 @@ import torch.nn.functional as F
 
 import ipdb
 
-# from xformers.ops import fmha
-# from xformers.ops.fmha.attn_bias import BlockDiagonalMask
-
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from timm.layers import Mlp, GluMlp, SwiGLU, LayerNorm, DropPath, PatchDropout, RotaryEmbeddingCat, \
     apply_keep_indices_nlc, trunc_normal_, resample_patch_embed, resample_abs_pos_embed, \
