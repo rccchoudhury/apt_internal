@@ -11,7 +11,7 @@ hydra-colorlog==1.2.0
 hydra-optuna-sweeper==1.2.0
 
 # --------- loggers --------- #
-# wandb
+wandb
 # neptune-client
 # mlflow
 # comet-ml
@@ -22,4 +22,9 @@ rootutils       # standardizing the project root setup
 pre-commit      # hooks for applying linters on commit
 rich            # beautiful text formatting in terminal
 pytest          # tests
+ipdb            # interactive python debugger
+opencv-python   # computer vision library (cv2)
+fvcore          # Facebook research core library for FLOP analysis
+einops          # tensor operations
+xformers        # efficient transformer implementations
 # sh            # for running bash commands in some tests (linux/macos only)

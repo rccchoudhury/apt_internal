@@ -17,7 +17,7 @@ from timm.layers.helpers import to_2tuple
 from timm.layers.format import Format
 from timm.layers.trace_utils import _assert
 
-from xformers.ops.fmha.attn_bias import BlockDiagonalMask
+# from xformers.ops.fmha.attn_bias import BlockDiagonalMask
 
 from .entropy_utils import select_patches_by_threshold
 from .graph_utils import generate_edge_dict, create_edge_embeds, group_patches, calculate_merge_ratio
@@ -204,7 +204,12 @@ class OnlySmallPatch(nn.Module):
 
         patchembed = patchembed[mask16].unsqueeze(0)
         
-        return patchembed, seqlens, cls_token_indices
+        # Compute cu_seqlens and max_seqlen for flash attention varlen
+        cu_seqlens = torch.cat([torch.zeros(1, dtype=torch.int32, device=x.device),
+                                torch.tensor(seqlens, dtype=torch.int32, device=x.device).cumsum(0)])
+        max_seqlen = max(seqlens)
+        
+        return patchembed, cu_seqlens, max_seqlen, cls_token_indices
 
 class QuadformerDownsizePatchEmbed(nn.Module):
     # TODO: refactor this, make it more generic / cleaner impl
@@ -309,7 +314,12 @@ class QuadformerDownsizePatchEmbed(nn.Module):
         # Add a batch dim = 1.
         expanded_output = expanded_output.unsqueeze(0)
         
-        return expanded_output, seqlens, cls_token_indices
+        # Compute cu_seqlens and max_seqlen for flash attention varlen
+        cu_seqlens = torch.cat([torch.zeros(1, dtype=torch.int32, device=x.device),
+                                torch.tensor(seqlens, dtype=torch.int32, device=x.device).cumsum(0)])
+        max_seqlen = max(seqlens)
+        
+        return expanded_output, cu_seqlens, max_seqlen, cls_token_indices
 
 class ZeroConvPatchAttn(nn.Module):
     # TODO: refactor this, make it more generic / cleaner impl
@@ -528,7 +538,13 @@ class ZeroConvPatchAttn(nn.Module):
         patch_embeds_masked = self._compute_multi_scale_embeddings(x, masks, patch_embed_base)
         patch_embeds_postprocessed, cls_token = self._prepare_attention_output(patch_embeds_masked, masks, batch_size, h, w, patch_embed_base)
         expanded_output = self._assemble_output(masks, batch_size, x, patch_embeds_postprocessed, cls_token, cls_tok_loc, total_tokens)
-        return expanded_output, seq_lengths, cls_tok_loc
+        
+        # Compute cu_seqlens and max_seqlen for flash attention varlen
+        cu_seqlens = torch.cat([torch.zeros(1, dtype=torch.int32, device=x.device),
+                                torch.tensor(seq_lengths, dtype=torch.int32, device=x.device).cumsum(0)])
+        max_seqlen = max(seq_lengths)
+        
+        return expanded_output, cu_seqlens, max_seqlen, cls_tok_loc
 
 class TokenizedZeroConvOldPatchAttn(nn.Module):
     def __init__(
@@ -812,4 +828,8 @@ class TokenizedZeroConvPatchAttn(nn.Module):
         if expanded_rope_mask is not None:
             output_rope = expanded_rope_mask[output_mask > 0].contiguous()
 
-        return expanded_outputs, input_dict["attn_mask"], cls_tok_loc, output_rope
+        # Return cu_seqlens and max_seqlen instead of attn_mask for flash attention varlen
+        cu_seqlens = input_dict["cu_seqlens"]
+        max_seqlen = input_dict["max_seqlen"]
+        
+        return expanded_outputs, cu_seqlens, max_seqlen, cls_tok_loc, output_rope

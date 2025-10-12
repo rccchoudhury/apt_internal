@@ -7,8 +7,7 @@ from torch import Tensor
 from torchvision import tv_tensors
 from torchvision.transforms import v2
 
-import xformers.ops as xops
-from xformers.ops.fmha.attn_bias import BlockDiagonalMask
+from flash_attn import flash_attn_varlen_func
 
 
 
@@ -80,8 +79,8 @@ class Attention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.use_flash_attn = use_flash_attn
 
-    def forward(self, x: Tensor, attn_mask: Optional[Tensor] = None) -> Tensor:
-        """Scaled DP attention."""
+    def forward(self, x: Tensor, attn_mask: Optional[Tensor] = None, cu_seqlens: Optional[Tensor] = None, max_seqlen: Optional[int] = None) -> Tensor:
+        """Scaled DP attention with flash-attn varlen support."""
         B, N, C = x.shape
         qkv_bias = None
         # AVION uses a QKV bias. We'll stick with this.
@@ -95,16 +94,39 @@ class Attention(nn.Module):
         qkv = F.linear(input=x, weight=self.qkv.weight, bias=qkv_bias)
         qkv = qkv.reshape(B, N, 3, self.num_heads, -1).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
-        if self.use_flash_attn:
-            # TODO: ensure this is the most optimal impl. 
-            # Also, should encompass the linear + proj steps in a single kernel.
-            q = q.transpose(1, 2)
+        
+        if self.use_flash_attn and cu_seqlens is not None and max_seqlen is not None:
+            # Flash-attn varlen API: requires flattened inputs
+            # q, k, v: (B, num_heads, N, head_dim) -> (total_tokens, num_heads, head_dim)
+            q = q.transpose(1, 2).reshape(-1, self.num_heads, q.shape[-1])
+            k = k.transpose(1, 2).reshape(-1, self.num_heads, k.shape[-1])
+            v = v.transpose(1, 2).reshape(-1, self.num_heads, v.shape[-1])
+            
+            x = flash_attn_varlen_func(
+                q, k, v,
+                cu_seqlens_q=cu_seqlens,
+                cu_seqlens_k=cu_seqlens,
+                max_seqlen_q=max_seqlen,
+                max_seqlen_k=max_seqlen,
+                dropout_p=self.attn_drop_rate if self.training else 0.0,
+                softmax_scale=self.scale,
+                causal=False
+            )
+            # x: (total_tokens, num_heads, head_dim) -> (B, N, num_heads * head_dim)
+            x = x.reshape(B, N, -1)
+        elif self.use_flash_attn:
+            # Standard flash attention (non-varlen)
+            from flash_attn import flash_attn_func
+            q = q.transpose(1, 2)  # (B, N, num_heads, head_dim)
             k = k.transpose(1, 2)
             v = v.transpose(1, 2)
-            x = xops.fmha.memory_efficient_attention(q, k, v, 
-                                                     p=self.attn_drop_rate, 
-                                                     scale=self.scale, 
-                                                     attn_bias=attn_mask)
+            x = flash_attn_func(
+                q, k, v,
+                dropout_p=self.attn_drop_rate if self.training else 0.0,
+                softmax_scale=self.scale,
+                causal=False
+            )
+            x = x.reshape(B, N, -1)
         else:
             # Non-optimized version.
             q = q * self.scale
@@ -114,9 +136,8 @@ class Attention(nn.Module):
             attn = self.attn_drop(attn)
 
             x = (attn @ v).transpose(1, 2)
+            x = x.reshape(B, N, -1)
 
-
-        x = x.reshape(B, N, -1)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -167,12 +188,12 @@ class Block(nn.Module):
         else:
             self.gamma_1, self.gamma_2 = None, None
 
-    def forward(self, x, attn_mask=None):
+    def forward(self, x, attn_mask=None, cu_seqlens=None, max_seqlen=None):
         if self.gamma_1 is None:
-            x = x + self.drop_path(self.attn(self.norm1(x), attn_mask))
+            x = x + self.drop_path(self.attn(self.norm1(x), attn_mask, cu_seqlens, max_seqlen))
             x = x + self.drop_path(self.mlp(self.norm2(x)))
         else:
-            x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x), attn_mask))
+            x = x + self.drop_path(self.gamma_1 * self.attn(self.norm1(x), attn_mask, cu_seqlens, max_seqlen))
             x = x + self.drop_path(self.gamma_2 * self.mlp(self.norm2(x)))
         return x
     

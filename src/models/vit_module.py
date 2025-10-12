@@ -223,12 +223,55 @@ patch
         
         return state_dict
 
+    def _map_naflexvit_to_flexivit_keys(self, state_dict: dict) -> dict:
+        """Map NaFlexVit checkpoint keys to FlexiViT keys.
+        
+        Args:
+            state_dict: State dict from NaFlexVit checkpoint
+            
+        Returns:
+            Mapped state dict compatible with FlexiViT
+        """
+        new_state_dict = {}
+        
+        for key, value in state_dict.items():
+            new_key = key
+            
+            # Map embedding module keys
+            if key.startswith('embeds.'):
+                # embeds.proj -> patch_embed.proj
+                if 'proj.' in key:
+                    new_key = key.replace('embeds.proj.', 'patch_embed.proj.')
+                # embeds.cls_token -> cls_token
+                elif key == 'embeds.cls_token':
+                    new_key = 'cls_token'
+                # embeds.reg_token -> reg_token
+                elif key == 'embeds.reg_token':
+                    new_key = 'reg_token'
+                # embeds.pos_embed -> pos_embed
+                elif key == 'embeds.pos_embed':
+                    new_key = 'pos_embed'
+                # embeds.pos_embed_x, pos_embed_y (factorized) - keep as is for now
+                elif 'pos_embed_' in key:
+                    new_key = key  # Keep embeds.pos_embed_x/y structure if needed
+            
+            # ROPE keys stay the same
+            # Block keys stay the same
+            # Head and norm keys stay the same
+            
+            new_state_dict[new_key] = value
+        
+        return new_state_dict
+
     def load_checkpoint(self, path: str) -> None:
         """Load a checkpoint from a given path.
         If the path exists, load from the file.
         If not, try to load from timm using the path as model name.
         
-        # TODO: something smarter for handling jax/flax ckpts, for now this is fine.
+        Supports loading from:
+        - Local checkpoint files
+        - timm models (including NaFlexVit/SigLIP)
+        - Automatic key mapping for NaFlexVit -> FlexiViT
         
         Args:
             path: The path to the checkpoint file or timm model name
@@ -251,6 +294,11 @@ patch
         if os.path.exists(path):
             # Load from local file
             state_dict = torch.load(path, weights_only=True)
+            
+            # Map NaFlexVit keys if loading into FlexiViT
+            if 'embeds.proj.weight' in state_dict and hasattr(self.net, 'patch_embed'):
+                print("Detected NaFlexVit checkpoint, mapping keys to FlexiViT format...")
+                state_dict = self._map_naflexvit_to_flexivit_keys(state_dict)
             
             # Resample position embedding if needed
             state_dict = self.resample_pos_embed(state_dict)
@@ -279,6 +327,11 @@ patch
                 # Convert timm state dict to our format if needed
                 state_dict = timm_model.state_dict()
                 
+                # Map NaFlexVit keys if loading into FlexiViT
+                if 'embeds.proj.weight' in state_dict and hasattr(self.net, 'patch_embed'):
+                    print("Detected NaFlexVit checkpoint from timm, mapping keys to FlexiViT format...")
+                    state_dict = self._map_naflexvit_to_flexivit_keys(state_dict)
+                
                 # Resample position embedding if needed
                 state_dict = self.resample_pos_embed(state_dict)
                 
@@ -289,6 +342,8 @@ patch
                     # Remove head-related keys from state dict if we don't want to match head shape
                     state_dict = {k: v for k, v in state_dict.items() if not k.startswith('head')}
                 missing_keys, unexpected_keys = self.net.load_state_dict(state_dict, strict=False)
+                print("missing keys: ", missing_keys)
+                print("unexpected keys: ", unexpected_keys)
                 #check_missing_keys(missing_keys, unexpected_keys)
             except Exception as e:
                 raise ValueError(f"Failed to load model from path {path} or timm: {e}")

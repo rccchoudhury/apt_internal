@@ -377,18 +377,18 @@ class VisionTransformer(nn.Module):
 
         return self.pos_drop(x)
         
-    def forward_features(self, x: torch.Tensor, attn_mask) -> torch.Tensor:
+    def forward_features(self, x: torch.Tensor, cu_seqlens=None, max_seqlen=None) -> torch.Tensor:
         # APPLY THE POSITION EMBEDDING
         x = self.patch_drop(x)
         x = self.norm_pre(x)
         
         if self.grad_checkpointing and not torch.jit.is_scripting():
             for block in self.blocks:
-                x = checkpoint(block, x, attn_mask=attn_mask)
+                x = checkpoint(block, x, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
         else:
             #x = x.reshape((1, -1, C))
             for block in self.blocks:
-                x = block(x, attn_mask=attn_mask)
+                x = block(x, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
                 
         x = self.norm(x)
         return x
@@ -411,9 +411,9 @@ class VisionTransformer(nn.Module):
     def forward(self, x, input_dict) -> torch.Tensor:
         if self.mixed_patch is not None:
             # Do the mixed-resolution patch embedding.
-            x, attn_mask, cls_token_indices, _ = self.mixed_patch(x, self.pos_embed, input_dict)
+            x, cu_seqlens, max_seqlen, cls_token_indices, _ = self.mixed_patch(x, self.pos_embed, input_dict)
             # Run the model.
-            x = self.forward_features(x, attn_mask)
+            x = self.forward_features(x, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
             # Select only the class tokens from each sequence.
             if self.global_pool == 'token':
                 x = x[0, cls_token_indices]
@@ -428,7 +428,7 @@ class VisionTransformer(nn.Module):
             x = self._pos_embed(x)
             # TEST!
             x = self.patch_drop(x)
-            x = self.forward_features(x, attn_mask=None)
+            x = self.forward_features(x, cu_seqlens=None, max_seqlen=None)
             x = self.pool(x)
         # Set pre logits to true for MAE.
         x = self.forward_head(x)

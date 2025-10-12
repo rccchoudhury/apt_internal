@@ -13,8 +13,6 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 import numpy as np
 import math
-from xformers.ops.fmha.attn_bias import BlockDiagonalMask
-
 from src.models.entropy_utils import (
     select_patches_by_threshold,
     visualize_selected_patches_cv2,
@@ -253,7 +251,12 @@ class PatchTokenizer(nn.Module):
         output_dict = self.construct_patch_groups(images, masks, pos_embeds)
         output_dict["output_mask"] = output_mask
         output_dict["seqlens"] = seqlens
-        output_dict["attn_mask"] = BlockDiagonalMask.from_seqlens(seqlens)
+        
+        # Compute cu_seqlens and max_seqlen for flash attention varlen
+        cu_seqlens = torch.cat([torch.zeros(1, dtype=torch.int32, device=images.device),
+                                torch.tensor(seqlens, dtype=torch.int32, device=images.device).cumsum(0)])
+        output_dict["cu_seqlens"] = cu_seqlens
+        output_dict["max_seqlen"] = max(seqlens)
 
         retained_patches = sum(seqlens)
         output_dict["retained_frac"] = retained_patches / max_patches

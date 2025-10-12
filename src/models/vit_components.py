@@ -4,10 +4,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from timm.layers import Mlp, DropPath, use_fused_attn
-from xformers.ops import fmha
-from xformers.ops.fmha.attn_bias import BlockDiagonalMask
-
-#from flash_attn.flash_attn_varlen import flash_attn_varlen_qkvpacked
+from flash_attn import flash_attn_varlen_func
 
 import ipdb
 
@@ -41,36 +38,46 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim, bias=proj_bias)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[BlockDiagonalMask] = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, cu_seqlens: Optional[torch.Tensor] = None, max_seqlen: Optional[int] = None) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
 
-        if attn_mask is not None:
-            qkv = qkv.permute(0, 2, 3, 1, 4).contiguous()
-            q, k, v = qkv.unbind(1)
+        if cu_seqlens is not None and max_seqlen is not None:
+            # Flash attention varlen path
+            qkv = qkv.permute(2, 0, 1, 3, 4)  # [3, B, N, num_heads, head_dim]
+            q, k, v = qkv.unbind(0)
             q, k = self.q_norm(q), self.k_norm(k)
-            # Xformers requires transposed input
-            q = q.transpose(1, 2)
-            k = k.transpose(1, 2)
-            v = v.transpose(1, 2)
-
-            out = fmha.memory_efficient_attention(
+            
+            # Flatten to [total_tokens, num_heads, head_dim]
+            q = q.reshape(-1, self.num_heads, self.head_dim)
+            k = k.reshape(-1, self.num_heads, self.head_dim)
+            v = v.reshape(-1, self.num_heads, self.head_dim)
+            
+            # Ensure cu_seqlens has correct dtype (int32)
+            cu_seqlens = cu_seqlens.to(torch.int32)
+            
+            out = flash_attn_varlen_func(
                 q, k, v,
-                attn_bias=attn_mask,
-                p=self.attn_drop.p if self.training else 0.0,
-                scale=self.scale,
+                cu_seqlens_q=cu_seqlens,
+                cu_seqlens_k=cu_seqlens,
+                max_seqlen_q=max_seqlen,
+                max_seqlen_k=max_seqlen,
+                dropout_p=self.attn_drop.p if self.training else 0.0,
+                softmax_scale=self.scale,
+                causal=False
             )
+            out = out.reshape(B, N, C)
         else:
+            # Standard attention path
             qkv = qkv.permute(2, 0, 3, 1, 4)
             q, k, v = qkv.unbind(0)
             q, k = self.q_norm(q), self.k_norm(k)
             out = F.scaled_dot_product_attention(
                 q, k, v,
                 dropout_p=self.attn_drop.p if self.training else 0.,
-            ).transpose(1, 2)
+            ).transpose(1, 2).reshape(B, N, C)
 
-        x = out.reshape(B, N, C)
-        x = self.proj(x)
+        x = self.proj(out)
         x = self.proj_drop(x)
         return x
 
@@ -131,8 +138,7 @@ class Block(nn.Module):
         self.ls2 = LayerScale(dim, init_values=init_values) if init_values else nn.Identity()
         self.drop_path2 = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        
-        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), attn_mask=attn_mask)))
+    def forward(self, x: torch.Tensor, cu_seqlens: Optional[torch.Tensor] = None, max_seqlen: Optional[int] = None, **kwargs) -> torch.Tensor:
+        x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)))
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
         return x

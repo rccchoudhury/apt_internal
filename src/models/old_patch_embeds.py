@@ -17,7 +17,7 @@ from timm.layers.helpers import to_2tuple
 from timm.layers.format import Format
 from timm.layers.trace_utils import _assert
 
-from xformers.ops.fmha.attn_bias import BlockDiagonalMask
+# from xformers.ops.fmha.attn_bias import BlockDiagonalMask
 
 from .entropy_utils import select_patches_by_threshold
 from .graph_utils import generate_edge_dict, create_edge_embeds, group_patches, calculate_merge_ratio
